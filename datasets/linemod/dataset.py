@@ -22,8 +22,19 @@ import cv2
 
 
 class PoseDataset(data.Dataset):
-    def __init__(self, mode, num, add_noise, root, noise_trans, refine):
-        self.objlist = [1, 2, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15]
+    def __init__(self, mode, num_pointcloud, add_noise, root, noise_trans, refine, objlist=None):
+        """
+
+        :param mode: train/test
+        :param num_pointcloud: number of points of the input pointcloud
+        :param add_noise:
+        :param root: dataset root
+        :param noise_trans: range of the random noise of translation added to the training data
+        :param refine:
+        :returns pointcloud, chosen_pixel_mask, normalized_cropped img (corresponding with object mask),
+        target (transformed model_points), model_points (sampled points from object mesh), object index
+        """
+        self.objlist = [1, 2, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15] if objlist is None else objlist
         self.mode = mode
 
         self.list_rgb = []
@@ -32,7 +43,7 @@ class PoseDataset(data.Dataset):
         self.list_obj = []
         self.list_rank = []
         self.meta = {}
-        self.pt = {}
+        self.pt = {}    # real object mesh
         self.root = root
         self.noise_trans = noise_trans
         self.refine = refine
@@ -64,8 +75,9 @@ class PoseDataset(data.Dataset):
 
             meta_file = open('{0}/data/{1}/gt.yml'.format(self.root, '%02d' % item), 'r')
             self.meta[item] = yaml.load(meta_file)
+            # real points in object mesh (in mm)
             self.pt[item] = ply_vtx('{0}/models/obj_{1}.ply'.format(self.root, '%02d' % item))
-            
+
             print("Object {0} buffer loaded".format(item))
 
         self.length = len(self.list_rgb)
@@ -78,20 +90,20 @@ class PoseDataset(data.Dataset):
         self.xmap = np.array([[j for i in range(640)] for j in range(480)])
         self.ymap = np.array([[i for i in range(640)] for j in range(480)])
         
-        self.num = num
+        self.num_pointcloud = num_pointcloud
         self.add_noise = add_noise
         self.trancolor = transforms.ColorJitter(0.2, 0.2, 0.2, 0.05)
         self.norm = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         self.border_list = [-1, 40, 80, 120, 160, 200, 240, 280, 320, 360, 400, 440, 480, 520, 560, 600, 640, 680]
         self.num_pt_mesh_large = 500
         self.num_pt_mesh_small = 500
-        self.symmetry_obj_idx = [7, 8]
+        self.symmetry_obj_idx = [7, 8]  # loss function is different between asymmetric and symmetric objects
 
     def __getitem__(self, index):
         img = Image.open(self.list_rgb[index])
         ori_img = np.array(img)
         depth = np.array(Image.open(self.list_depth[index]))
-        label = np.array(Image.open(self.list_label[index]))
+        label = np.array(Image.open(self.list_label[index]))    # mask image (train mode)/ segmented image (eval mode)
         obj = self.list_obj[index]
         rank = self.list_rank[index]        
 
@@ -127,22 +139,22 @@ class PoseDataset(data.Dataset):
         #p_img = np.transpose(img_masked, (1, 2, 0))
         #scipy.misc.imsave('evaluation_result/{0}_input.png'.format(index), p_img)
 
-        target_r = np.resize(np.array(meta['cam_R_m2c']), (3, 3))
-        target_t = np.array(meta['cam_t_m2c'])
-        add_t = np.array([random.uniform(-self.noise_trans, self.noise_trans) for i in range(3)])
+        target_r = np.resize(np.array(meta['cam_R_m2c']), (3, 3))   # ground truth rotation
+        target_t = np.array(meta['cam_t_m2c'])                      # ground truth translation
+        add_t = np.array([random.uniform(-self.noise_trans, self.noise_trans) for i in range(3)])   # translated noise
 
         choose = mask[rmin:rmax, cmin:cmax].flatten().nonzero()[0]
         if len(choose) == 0:
             cc = torch.LongTensor([0])
             return(cc, cc, cc, cc, cc, cc)
 
-        if len(choose) > self.num:
+        if len(choose) > self.num_pointcloud:
             c_mask = np.zeros(len(choose), dtype=int)
-            c_mask[:self.num] = 1
+            c_mask[:self.num_pointcloud] = 1
             np.random.shuffle(c_mask)
             choose = choose[c_mask.nonzero()]
         else:
-            choose = np.pad(choose, (0, self.num - len(choose)), 'wrap')
+            choose = np.pad(choose, (0, self.num_pointcloud - len(choose)), 'wrap')
         
         depth_masked = depth[rmin:rmax, cmin:cmax].flatten()[choose][:, np.newaxis].astype(np.float32)
         xmap_masked = self.xmap[rmin:rmax, cmin:cmax].flatten()[choose][:, np.newaxis].astype(np.float32)
@@ -164,17 +176,17 @@ class PoseDataset(data.Dataset):
         #    fw.write('{0} {1} {2}\n'.format(it[0], it[1], it[2]))
         #fw.close()
 
-        model_points = self.pt[obj] / 1000.0
+        model_points = self.pt[obj] / 1000.0    # real points from the object mesh (in m)
         dellist = [j for j in range(0, len(model_points))]
         dellist = random.sample(dellist, len(model_points) - self.num_pt_mesh_small)
-        model_points = np.delete(model_points, dellist, axis=0)
+        model_points = np.delete(model_points, dellist, axis=0)     # randomly sampled points from the object mesh
 
         #fw = open('evaluation_result/{0}_model_points.xyz'.format(index), 'w')
         #for it in model_points:
         #    fw.write('{0} {1} {2}\n'.format(it[0], it[1], it[2]))
         #fw.close()
 
-        target = np.dot(model_points, target_r.T)
+        target = np.dot(model_points, target_r.T)   # translated and rotated sampled points from object mesh
         if self.add_noise:
             target = np.add(target, target_t / 1000.0 + add_t)
             out_t = target_t / 1000.0 + add_t
@@ -207,7 +219,6 @@ class PoseDataset(data.Dataset):
             return self.num_pt_mesh_small
 
 
-
 border_list = [-1, 40, 80, 120, 160, 200, 240, 280, 320, 360, 400, 440, 480, 520, 560, 600, 640, 680]
 img_width = 480
 img_length = 640
@@ -215,7 +226,10 @@ img_length = 640
 
 def mask_to_bbox(mask):
     mask = mask.astype(np.uint8)
-    _, contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    if int(cv2.__version__.replace(".", "")) < 400:
+        _, contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    else:
+        contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     x = 0
     y = 0
     w = 0
@@ -276,6 +290,11 @@ def get_bbox(bbox):
 
 
 def ply_vtx(path):
+    """
+    Read ply file of object mesh
+    :param path:
+    :return: np array of object mesh
+    """
     f = open(path)
     assert f.readline().strip() == "ply"
     f.readline()
