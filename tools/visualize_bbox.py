@@ -7,8 +7,7 @@ import torch.utils.data
 from torch.autograd import Variable
 from datasets.linemod.dataset import PoseDataset as PoseDataset_linemod
 from lib.network import PoseNet, PoseRefineNet
-from lib.utils import cloud_to_dims
-from tools.eval_linemod import iterative_points_refine
+from lib.utils import cloud_to_dims, iterative_points_refine
 from transformations import euler_matrix, quaternion_matrix, quaternion_from_matrix
 import cv2
 import numpy as np

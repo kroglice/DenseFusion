@@ -1,28 +1,21 @@
-import _init_paths
 import argparse
 import os
-import random
 import numpy as np
 import yaml
-import copy
 import torch
-import torch.nn as nn
 import torch.nn.parallel
-import torch.backends.cudnn as cudnn
-import torch.optim as optim
 import torch.utils.data
-import torchvision.datasets as dset
-import torchvision.transforms as transforms
-import torchvision.utils as vutils
+
 from torch.autograd import Variable
 from datasets.linemod.dataset import PoseDataset as PoseDataset_linemod
 from lib.network import PoseNet, PoseRefineNet
 from lib.loss import Loss
 from lib.loss_refiner import Loss_refine
 # from lib.transformations import euler_matrix, quaternion_matrix, quaternion_from_matrix
-from transformations import euler_matrix, quaternion_matrix, quaternion_from_matrix
-from transforms3d import quaternions
+from transformations import quaternion_matrix
 from lib.knn.__init__ import KNearestNeighbor
+
+from lib.utils import iterative_points_refine
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset_root', type=str, default = '', help='dataset root dir')
@@ -97,7 +90,7 @@ def main():
         my_t = (points.view(bs * num_points, 1, 3) + pred_t)[which_max[0]].view(-1).cpu().data.numpy()
         my_pred = np.append(my_r, my_t)
 
-        my_pred, my_r, my_t = iterative_points_refine(refiner, points, emb, idx, iteration, my_r, my_t, bs, num_points)
+        my_pred, my_r, my_t = iterative_points_refine (refiner, points, emb, idx, iteration, my_r, my_t, bs, num_points)
         # Here 'my_pred' is the final pose estimation result after refinement ('my_r': quaternion, 'my_t': translation)
 
         model_points = model_points[0].cpu().detach().numpy()
@@ -130,48 +123,6 @@ def main():
     fw.write('ALL success rate: {0}\n'.format(float(sum(success_count)) / sum(num_count)))
     fw.close()
 
-
-def iterative_points_refine(refiner, points, emb, idx, iteration, my_r, my_t, bs, num_points):
-    """
-    Refine predicted transformation matrix
-    :param refiner: refiner network
-    :param points: cropped point cloud
-    :param emb: embedding from estimator
-    :param idx: output of estimator
-    :param iteration: number of refinement iteration
-    :param my_r: current pred_r
-    :param my_t: current pred_t
-    :param bs: batch size
-    :param num_points: number of points from mesh
-    :return: my_pred, my_r, my_t
-    """
-    for ite in range (0, iteration):
-        T = Variable(torch.from_numpy(my_t.astype (np.float32))).cuda ().view(1, 3).repeat(bs*num_points,1).contiguous().view (1,bs*num_points,3)
-        my_mat = quaternion_matrix(my_r)
-        R = Variable(torch.from_numpy(my_mat[:3, :3].astype (np.float32))).cuda().view(1, 3, 3)
-        my_mat[0:3, 3] = my_t
-
-        new_points = torch.bmm((points - T), R).contiguous()
-        pred_r, pred_t = refiner(new_points, emb, idx)
-        pred_r = pred_r.view(1, 1, -1)
-        pred_r = pred_r / (torch.norm(pred_r, dim=2).view(1, 1, 1))
-        my_r_2 = pred_r.view(-1).cpu().data.numpy()
-        my_t_2 = pred_t.view(-1).cpu().data.numpy()
-        my_mat_2 = quaternion_matrix(my_r_2)
-
-        my_mat_2[0:3, 3] = my_t_2
-
-        my_mat_final = np.dot(my_mat, my_mat_2)
-        my_r_final = copy.deepcopy(my_mat_final)
-        my_r_final[0:3, 3] = 0
-        my_r_final = quaternion_from_matrix(my_r_final, True)
-        my_t_final = np.array([my_mat_final[0][3], my_mat_final[1][3], my_mat_final[2][3]])
-
-        my_pred = np.append(my_r_final, my_t_final)
-        my_r = my_r_final
-        my_t = my_t_final
-
-        return my_pred, my_r, my_t
 
 if __name__ == '__main__':
     # torch.multiprocessing.set_start_method('spawn')

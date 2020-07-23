@@ -3,6 +3,11 @@ import numpy as np
 import open3d as o3d
 import copy
 
+import torch
+from torch.autograd import Variable
+from transformations import quaternion_matrix, quaternion_from_matrix
+
+
 def setup_logger(logger_name, log_file, level=logging.INFO):
     l = logging.getLogger(logger_name)
     formatter = logging.Formatter('%(asctime)s : %(message)s')
@@ -77,3 +82,46 @@ def compute_3d_bbox(centroid, dim_from_centroid):
                 connected_idx.append([i, j])
 
     return bbox, connected_idx
+
+
+def iterative_points_refine(refiner, points, emb, idx, iteration, my_r, my_t, bs, num_points):
+    """
+    Refine predicted transformation matrix
+    :param refiner: refiner network
+    :param points: cropped point cloud
+    :param emb: embedding from estimator
+    :param idx: output of estimator
+    :param iteration: number of refinement iteration
+    :param my_r: current pred_r
+    :param my_t: current pred_t
+    :param bs: batch size
+    :param num_points: number of points from mesh
+    :return: my_pred, my_r, my_t
+    """
+    for ite in range (0, iteration):
+        T = Variable(torch.from_numpy(my_t.astype (np.float32))).cuda ().view(1, 3).repeat(bs*num_points,1).contiguous().view (1,bs*num_points,3)
+        my_mat = quaternion_matrix(my_r)
+        R = Variable(torch.from_numpy(my_mat[:3, :3].astype (np.float32))).cuda().view(1, 3, 3)
+        my_mat[0:3, 3] = my_t
+
+        new_points = torch.bmm((points - T), R).contiguous()
+        pred_r, pred_t = refiner(new_points, emb, idx)
+        pred_r = pred_r.view(1, 1, -1)
+        pred_r = pred_r / (torch.norm(pred_r, dim=2).view(1, 1, 1))
+        my_r_2 = pred_r.view(-1).cpu().data.numpy()
+        my_t_2 = pred_t.view(-1).cpu().data.numpy()
+        my_mat_2 = quaternion_matrix(my_r_2)
+
+        my_mat_2[0:3, 3] = my_t_2
+
+        my_mat_final = np.dot(my_mat, my_mat_2)
+        my_r_final = copy.deepcopy(my_mat_final)
+        my_r_final[0:3, 3] = 0
+        my_r_final = quaternion_from_matrix(my_r_final, True)
+        my_t_final = np.array([my_mat_final[0][3], my_mat_final[1][3], my_mat_final[2][3]])
+
+        my_pred = np.append(my_r_final, my_t_final)
+        my_r = my_r_final
+        my_t = my_t_final
+
+        return my_pred, my_r, my_t
