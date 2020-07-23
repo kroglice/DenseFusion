@@ -16,12 +16,12 @@ import scipy.io as scio
 
 
 class PoseDataset(data.Dataset):
-    def __init__(self, mode, num_pt, add_noise, root, noise_trans, refine):
+    def __init__(self, mode, num_pointcloud, add_noise, root, noise_trans, refine):
         if mode == 'train':
             self.path = 'datasets/ycb/dataset_config/train_data_list.txt'
         elif mode == 'test':
             self.path = 'datasets/ycb/dataset_config/test_data_list.txt'
-        self.num_pt = num_pt
+        self.num_pointcloud = num_pointcloud
         self.root = root
         self.add_noise = add_noise
         self.noise_trans = noise_trans
@@ -175,13 +175,13 @@ class PoseDataset(data.Dataset):
         add_t = np.array([random.uniform(-self.noise_trans, self.noise_trans) for i in range(3)])
 
         choose = mask[rmin:rmax, cmin:cmax].flatten().nonzero()[0]
-        if len(choose) > self.num_pt:
+        if len(choose) > self.num_pointcloud:
             c_mask = np.zeros(len(choose), dtype=int)
-            c_mask[:self.num_pt] = 1
+            c_mask[:self.num_pointcloud] = 1
             np.random.shuffle(c_mask)
             choose = choose[c_mask.nonzero()]
         else:
-            choose = np.pad(choose, (0, self.num_pt - len(choose)), 'wrap')
+            choose = np.pad(choose, (0, self.num_pointcloud - len(choose)), 'wrap')
         
         depth_masked = depth[rmin:rmax, cmin:cmax].flatten()[choose][:, np.newaxis].astype(np.float32)
         xmap_masked = self.xmap[rmin:rmax, cmin:cmax].flatten()[choose][:, np.newaxis].astype(np.float32)
