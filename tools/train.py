@@ -109,7 +109,8 @@ def main():
     criterion_refine = Loss_refine(opt.num_points_mesh, opt.sym_list)
 
     best_test = np.Inf
-
+    if not os.path.exists(opt.log_dir):
+        os.makedirs(os.path.join(os.getcwd(),opt.log_dir))
     if opt.start_epoch == 1:
         for log in os.listdir(opt.log_dir):
             os.remove(os.path.join(opt.log_dir, log))
