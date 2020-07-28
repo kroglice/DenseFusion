@@ -6,7 +6,7 @@ import copy
 import torch
 from torch.autograd import Variable
 from transformations import quaternion_matrix, quaternion_from_matrix
-
+from collections import defaultdict
 
 def setup_logger(logger_name, log_file, level=logging.INFO):
     l = logging.getLogger(logger_name)
@@ -21,6 +21,29 @@ def setup_logger(logger_name, log_file, level=logging.INFO):
     streamHandler.setFormatter(formatter)
     l.addHandler(streamHandler)
     return l
+
+
+def launchTensorBoard(data_read_dir):
+    # This is nicer but does not show scalars...
+    # from tensorboard import default
+    from tensorboard import program
+    tb = program.TensorBoard()
+    # tb = program.TensorBoard(default.get_plugins(), default.get_assets_zip_provider())
+    port = 6006
+    while True:
+        # tb.configure(argv=[None, '--logdir', self.path, '--port', str(port)])
+        tb.configure(argv=[None, '--logdir', data_read_dir, '--port', str(port)])
+        # tb.configure(argv=[None, '--logdir', self.data_read_dir, '--port', str(port), '--embeddings_data', 'None'])
+        try:
+            url = tb.launch()
+            break
+        except Exception as e:
+            print(e)
+        port += 2
+        if port > 7000:
+            print("Could not find an open port for tensorboard. Tensorboard has to be launched manually.")
+            return
+    print("Tensorboard running at {}".format(url))
 
 
 def cloud_to_dims(obj_cloud):
