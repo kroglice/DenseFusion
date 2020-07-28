@@ -161,6 +161,7 @@ class PoseDataset(data.Dataset):
         ymap_masked = self.ymap[rmin:rmax, cmin:cmax].flatten()[choose][:, np.newaxis].astype(np.float32)
         choose = np.array([choose])
 
+        # depth map to point cloud
         cam_scale = 1.0
         pt2 = depth_masked / cam_scale
         pt0 = (ymap_masked - self.cam_cx) * pt2 / self.cam_fx

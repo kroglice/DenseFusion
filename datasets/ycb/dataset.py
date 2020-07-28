@@ -8,7 +8,6 @@ import torchvision.transforms as transforms
 import argparse
 import time
 import random
-from lib.transformations import quaternion_from_euler, euler_matrix, random_quaternion, quaternion_matrix
 import numpy.ma as ma
 import copy
 import scipy.misc
@@ -63,7 +62,7 @@ class PoseDataset(data.Dataset):
                     break
                 input_line = input_line[:-1].split(' ')
                 self.cld[class_id].append([float(input_line[0]), float(input_line[1]), float(input_line[2])])
-            self.cld[class_id] = np.array(self.cld[class_id])
+            self.cld[class_id] = np.array(self.cld[class_id])   # array of the original mesh
             input_file.close()
             
             class_id += 1
@@ -188,6 +187,7 @@ class PoseDataset(data.Dataset):
         ymap_masked = self.ymap[rmin:rmax, cmin:cmax].flatten()[choose][:, np.newaxis].astype(np.float32)
         choose = np.array([choose])
 
+        # depth map to point cloud
         cam_scale = meta['factor_depth'][0][0]
         pt2 = depth_masked / cam_scale
         pt0 = (ymap_masked - cam_cx) * pt2 / cam_fx
@@ -206,7 +206,7 @@ class PoseDataset(data.Dataset):
             dellist = random.sample(dellist, len(self.cld[obj[idx]]) - self.num_pt_mesh_large)
         else:
             dellist = random.sample(dellist, len(self.cld[obj[idx]]) - self.num_pt_mesh_small)
-        model_points = np.delete(self.cld[obj[idx]], dellist, axis=0)
+        model_points = np.delete(self.cld[obj[idx]], dellist, axis=0)   # randomly sampled points from the object mesh
 
         # fw = open('temp/{0}_model_points.xyz'.format(index), 'w')
         # for it in model_points:
