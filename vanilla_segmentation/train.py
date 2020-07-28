@@ -20,6 +20,7 @@ from segnet import SegNet as segnet
 import sys
 sys.path.append("..")
 from lib.utils import setup_logger
+from tqdm import tqdm
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset_root', default='/home/data1/jeremy/YCB_Video_Dataset', help="dataset root dir (''YCB_Video Dataset'')")
@@ -59,7 +60,7 @@ if __name__ == '__main__':
     best_val_cost = np.Inf
     st_time = time.time()
 
-    for epoch in range(1, opt.n_epochs):
+    for epoch in tqdm(range(1, opt.n_epochs)):
         model.train()
         train_all_cost = 0.0
         train_time = 0
