@@ -26,6 +26,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--dataset_root', default='/home/data1/jeremy/YCB_Video_Dataset', help="dataset root dir (''YCB_Video Dataset'')")
 parser.add_argument('--batch_size', type=int, default=3, help="batch size")
 parser.add_argument('--n_epochs', type=int, default=600, help="epochs to train")
+parser.add_argument('--log_interval', type=int, default=20, help="epochs to train")
 parser.add_argument('--workers', type=int, default=10, help='number of data loading workers')
 parser.add_argument('--lr', type=float, default=0.0001, help="learning rate")
 parser.add_argument('--logs_path', default='logs/', help="path to save logs")
@@ -77,7 +78,7 @@ if __name__ == '__main__':
             semantic_loss.backward()
             optimizer.step()
 
-            if train_time != 0 and train_time % 20 == 0:
+            if train_time != 0 and train_time % opt.log_interval == 0:
                 logger.info('Train time {0} Batch {1} CEloss {2}'.format (
                     time.strftime ("%Hh %Mm %Ss", time.gmtime (time.time () - st_time)), train_time,
                     semantic_loss.item ()))
@@ -98,8 +99,10 @@ if __name__ == '__main__':
             semantic = model(rgb)
             semantic_loss = criterion(semantic, target)
             test_all_cost += semantic_loss.item()
+
+            if test_time != 0 and test_time % opt.log_interval == 0:
+                logger.info('Test time {0} Batch {1} CEloss {2}'.format(time.strftime("%Hh %Mm %Ss", time.gmtime(time.time() - st_time)), test_time, semantic_loss.item()))
             test_time += 1
-            logger.info('Test time {0} Batch {1} CEloss {2}'.format(time.strftime("%Hh %Mm %Ss", time.gmtime(time.time() - st_time)), test_time, semantic_loss.item()))
 
         test_all_cost = test_all_cost / test_time
         logger.info('Test Finish Avg CEloss: {0}'.format(test_all_cost))
