@@ -1,9 +1,4 @@
-## License: Apache 2.0. See LICENSE file in root directory.
-## Copyright(c) 2017 Intel Corporation. All Rights Reserved.
-
-#####################################################
-##              Align Depth to Color               ##
-#####################################################
+# Adapted image acquisition from realsense demo code
 
 # First import the library
 import pyrealsense2 as rs
@@ -290,35 +285,13 @@ def main():
                 # calculate bbox and draw them
                 # obj_mask is equivalent to the mask_label in dataset
                 # r_min, r_max, c_min, c_max, obj_mask = bbox_obj_mask(mask_idx, list_obj[i], None, color)
-                r_min, r_max, c_min, c_max, obj_mask = bbox_obj_mask (mask_idx, list_obj[i], color_image, color)
+                r_min, r_max, c_min, c_max, obj_mask = bbox_obj_mask(mask_idx, list_obj[i], color_image, color)
                 segmented_bboxes[i] = [r_min, r_max, c_min, c_max]
                 obj_masks[i] = obj_mask
                 obj_masks_new += obj_mask//255*i
 
-            # mask
-
-            # mask_idx = ma.masked_equal(semantic_img, obj_idx)
-            # obj_mask = ma.getmaskarray(mask_idx).astype(np.uint8)
-            # obj_mask = removeSmallComponents(obj_mask, 200)
-
-
-            # bbox = mask_to_bbox(obj_mask)
-            # r_min, r_max, c_min, c_max = get_bbox(bbox)
-            # cv2.rectangle(image, (c_min, r_min), (c_max, r_max), color, thickness=3)
-            # cv2.putText(image, obj_label, (c_min, r_min - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-            # obj_mask = cv2.connectedComponentsWithStats(obj_mask, connectivity=8, ltype=cv2.CV_32S)
-            # contours, _ = cv2.findContours(obj_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-
             obj_semantic = semantic[obj_idx]
-            # bbox = bbox_of_obj_semantic(obj_semantic, list_obj[obj_idx], color_image)
-            # if bbox is not None:
-            #     r_min, r_max, c_min, c_max = bbox[0], bbox[1], bbox[2], bbox[3]
 
-            # for i, sem in enumerate(semantic):
-            #     if i is not 0:
-            #         bbox = bbox_of_obj_semantic(sem, list_obj[i], color_image)
-            #         if bbox is not None:
-            #             r_min, r_max, c_min, c_max = bbox[0], bbox[1], bbox[2], bbox[3]
             # Remove background - Set pixels further than clipping_distance to grey
             grey_color = 153
             depth_image_3d = np.dstack((depth_image, depth_image, depth_image)) # depth image is 1 channel, color is 3 channels
@@ -381,8 +354,8 @@ def main():
                 _, my_r, my_t = iterative_points_refine(refiner, cloud, emb, index, 4, my_r, my_t, 1,
                                                         num_points)
                 ycb_dataset.update_transformation(my_r, my_t)
-                # target = target[0].cpu().detach().numpy()
-                # target = target.cpu().detach().numpy()
+
+                # randomly sample points from object mesh and transform it with my_r, my_t
                 list_points = [i for i in range(0, len(model_points))]
                 list_points = random.sample(list_points, num_points)
                 transformed_model_points = ycb_dataset.transform_points(model_points[list_points])
