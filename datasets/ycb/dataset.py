@@ -17,17 +17,19 @@ import scipy.io as scio
 class PoseDataset(data.Dataset):
     def __init__(self, mode, num_pointcloud, add_noise, root, noise_trans, refine):
         if mode == 'train':
-            self.path = 'datasets/ycb/dataset_config/train_data_list.txt'
+            self.path = '../datasets/ycb/dataset_config/train_data_list_tiny.txt'
         elif mode == 'test':
-            self.path = 'datasets/ycb/dataset_config/test_data_list.txt'
+            self.path = '../datasets/ycb/dataset_config/test_data_list_tiny.txt'
         self.num_pointcloud = num_pointcloud
         self.root = root
         self.add_noise = add_noise
         self.noise_trans = noise_trans
 
+        self.list_rgb = []
         self.list = []
         self.real = []
         self.syn = []
+        self.list_obj = {}  # dict of object list
         input_file = open(self.path)
         while 1:
             input_line = input_file.readline()
@@ -40,19 +42,22 @@ class PoseDataset(data.Dataset):
             else:
                 self.syn.append(input_line)
             self.list.append(input_line)
+            self.list_rgb.append('{0}/{1}'.format(self.root, input_line))
         input_file.close()
 
         self.length = len(self.list)
         self.len_real = len(self.real)
         self.len_syn = len(self.syn)
 
-        class_file = open('datasets/ycb/dataset_config/classes.txt')
+        class_file = open('../datasets/ycb/dataset_config/classes.txt')
         class_id = 1
         self.cld = {}
         while 1:
             class_input = class_file.readline()
             if not class_input:
                 break
+
+            self.list_obj[class_id] = class_input[:-1]
 
             input_file = open('{0}/models/{1}/points.xyz'.format(self.root, class_input[:-1]))
             self.cld[class_id] = []
