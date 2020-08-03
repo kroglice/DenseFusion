@@ -6,6 +6,7 @@ import torch
 import torch.utils.data
 from torch.autograd import Variable
 from datasets.linemod.dataset import PoseDataset as PoseDataset_linemod
+from datasets.ycb.dataset import PoseDataset as PoseDataset_ycb
 from lib.network import PoseNet, PoseRefineNet
 from lib.utils import cloud_to_dims, iterative_points_refine
 from transformations import euler_matrix, quaternion_matrix, quaternion_from_matrix
@@ -20,9 +21,16 @@ parser.add_argument('--model', type=str, default = '',  help='resume PoseNet mod
 parser.add_argument('--refine_model', type=str, default = '',  help='resume PoseRefineNet model')
 opt = parser.parse_args()
 
-class PoseDataset_visualize(PoseDataset_linemod):
-    def __init__(self, mode, num_pointcloud, add_noise, root, noise_trans, refine, objlist):
-        super().__init__(mode, num_pointcloud, add_noise, root, noise_trans, refine, objlist)
+
+class Visualizer(object):
+    def __init__(self, objlist, mesh_points, list_obj, list_rgb, cam_info, point_scale=1.):
+        self.objlist = objlist
+        self.pt = mesh_points
+        self.list_obj = list_obj
+        self.list_rgb = list_rgb
+        self.point_scale = point_scale  # point cloud unit in mm, point_scale = 1000.
+        self.cam_cx, self.cam_cy, self.cam_fx, self.cam_fy = cam_info[0], cam_info[1], cam_info[2], cam_info[3]
+
         self.list_dims = self.compute_obj_dim()
         self.cur_r = np.array([0., 0., 0., 1.])
         self.cur_t = np.zeros([3])
@@ -30,7 +38,7 @@ class PoseDataset_visualize(PoseDataset_linemod):
     def compute_obj_dim(self):
         list_dims = {}
         for i in self.objlist:
-            model_points = self.pt[i]/1000.
+            model_points = self.pt[i] / self.point_scale
             obj_dims = cloud_to_dims(model_points)
             list_dims[i] = obj_dims
         return list_dims
@@ -39,49 +47,31 @@ class PoseDataset_visualize(PoseDataset_linemod):
         self.cur_r = new_r
         self.cur_t = new_t
 
-    def update_bbox(self, bbox_points):
+    def update_cam_info(self, cam_info):
+        self.cam_cx, self.cam_cy, self.cam_fx, self.cam_fy = cam_info[0], cam_info[1], cam_info[2], cam_info[3]
+
+    def transform_points(self, bbox_points):
         my_t = self.cur_t
         my_r = quaternion_matrix(self.cur_r.copy())[:3, :3]
         pred_bbox = np.dot(bbox_points, my_r.T) + my_t  # prediction of sampled pixel after being transformed
         return pred_bbox
 
     def draw_bbox(self, bbox_pxls, img, connected_idxs):
-        # for j in range(2):
-        #     for i in range(3):
-        #         img = cv2.line(img, tuple(bbox_pxls[j*4]), tuple(bbox_pxls[j*4+i+1]),
-        #                        color=(255,0,0), thickness=2)
-        #     # for i in range(2):
-        #     #     img = cv2.line(img, tuple(bbox_pxls[j+1]), tuple(bbox_pxls[i+6]),
-        #     #                    color=(255, 0, 0), thickness=2)
-        #
-        # img = cv2.line(img, tuple(bbox_pxls[1]), tuple(bbox_pxls[6]),
-        #                color=(255, 0, 0), thickness=2)
-        # img = cv2.line(img, tuple(bbox_pxls[1]), tuple(bbox_pxls[7]),
-        #                color=(255, 0, 0), thickness=2)
-        # img = cv2.line(img, tuple(bbox_pxls[2]), tuple(bbox_pxls[5]),
-        #                 color=(255, 0, 0), thickness=2)
-        # img = cv2.line(img, tuple(bbox_pxls[2]), tuple(bbox_pxls[7]),
-        #                color=(255, 0, 0), thickness=2)
-        # img = cv2.line(img, tuple(bbox_pxls[3]), tuple(bbox_pxls[5]),
-        #                color=(255, 0, 0), thickness=2)
-        # img = cv2.line(img, tuple(bbox_pxls[3]), tuple(bbox_pxls[6]),
-        #                 color=(255, 0, 0), thickness=2)
-        # img = cv2.line(img, tuple(bbox_pxls[3]), tuple(bbox_pxls[5]),
-        #                color=(255, 0, 0), thickness=2)
         for i, vertices in enumerate(connected_idxs):
             img = cv2.line(img, tuple(bbox_pxls[vertices[0]]), tuple(bbox_pxls[vertices[1]]),
                            color=(255, 0, 0), thickness=2)
 
-
     def visualize_item(self, index, target=None):
         img = cv2.imread(self.list_rgb[index])
         obj = self.list_obj[index]
+        self.visualize_img(img, obj, target, True)
+
+    def visualize_img(self, img, obj, target=None, cv_show=False):
         obj_bbox = self.list_dims[obj]['bbox']
-        obj_bbox = self.update_bbox(obj_bbox)
+        obj_bbox = self.transform_points(obj_bbox)
         obj_bbox_pxls = self.project_point_pxl(obj_bbox)
-        # print('obj bbox {}\n obj bbox pxls {}'.format(obj_bbox, obj_bbox_pxls))
         for px in obj_bbox_pxls:
-            img = cv2.circle(img, tuple(px), radius=1, color=(255,0,0), thickness=2)
+            img = cv2.circle(img, tuple(px), radius=1, color=(255, 0, 0), thickness=2)
         connected_idxs = self.list_dims[obj]['connected_idxs']
         self.draw_bbox(obj_bbox_pxls, img, connected_idxs)
         # tuple_pxls = tuple([tuple(row) for row in obj_bbox_pxls])
@@ -90,9 +80,10 @@ class PoseDataset_visualize(PoseDataset_linemod):
             # target = self.swap_pxls(target)
             for px in target:
                 img = cv2.circle(img, tuple(px), radius=1, color=(0, 0, 255), thickness=1)
-        cv2.imshow('img', img)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+        if cv_show:
+            cv2.imshow('img', img)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
 
     def project_point_pxl(self, points):
         """
@@ -109,8 +100,8 @@ class PoseDataset_visualize(PoseDataset_linemod):
         # pxls = np.dot(cam_matrix, np.asarray(points).T)
         # pxls = np.dot(np.asarray(points), cam_matrix.T)
         # return np.floor(pxls[:, :2]).astype(int)
-        u = self.cam_fx*points[:, 0]/points[:, 2] + self.cam_cx
-        v = self.cam_fy*points[:, 1]/points[:, 2] + self.cam_cy
+        # u = self.cam_fx * points[:, 0] / points[:, 2] + self.cam_cx
+        # v = self.cam_fy * points[:, 1] / points[:, 2] + self.cam_cy
         pixel_points, _ = cv2.projectPoints(points.reshape(1, -1, 3), np.zeros((3, 1)), np.zeros((3, 1)),
                                             cam_matrix, None)
         return np.floor(pixel_points.reshape((-1, 2))).astype(int)
@@ -119,6 +110,22 @@ class PoseDataset_visualize(PoseDataset_linemod):
         temp = pxls.copy()
         temp[:, 0], temp[:, 1] = temp[:, 1], temp[:, 0].copy()
         return temp
+
+
+class PoseDataset_visualize(PoseDataset_linemod, Visualizer):
+    def __init__(self, mode, num_pointcloud, add_noise, root, noise_trans, refine, objlist):
+        PoseDataset_linemod.__init__(self, mode, num_pointcloud, add_noise, root, noise_trans, refine, objlist)
+        cam_info = [self.cam_cx, self.cam_cy, self.cam_fx, self.cam_fy]
+        Visualizer.__init__(self, self.objlist, self.pt, self.list_obj, self.list_rgb, cam_info, point_scale=1000.)
+
+
+class PoseYCBDataset_visualize(PoseDataset_ycb, Visualizer):
+    def __init__(self, mode, num_pointcloud, add_noise, root, noise_trans, refine):
+        PoseDataset_ycb.__init__(self, mode, num_pointcloud, add_noise, root, noise_trans, refine)
+        cam_info = [self.cam_cx_1, self.cam_cy_1, self.cam_fx_1, self.cam_fy_1] # TODO: work with this
+        objlist = self.list_obj.keys()
+        pt = self.cld
+        Visualizer.__init__(self, objlist, pt, self.list_obj, self.list_rgb, cam_info)
 
 
 def main():
