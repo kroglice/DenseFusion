@@ -23,7 +23,6 @@ from lib.utils import cloud_to_dims, iterative_points_refine
 from visualize_bbox import PoseYCBDataset_visualize
 import argparse
 
-img_w, img_h = 640, 480
 cropped_w, cropped_h = 160, 160
 xmap = np.array([[j for i in range(640)] for j in range(480)])
 ymap = np.array([[i for i in range(640)] for j in range(480)])
@@ -32,6 +31,8 @@ ymap = np.array([[i for i in range(640)] for j in range(480)])
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset_root', default='', help="dataset root dir (''YCB_Video Dataset'')")
 parser.add_argument('--batch_size', type=int, default=3, help="batch size")
+parser.add_argument('--img_w', type=int, default=640, help="image width")
+parser.add_argument('--img_h', type=int, default=480, help="image height")
 parser.add_argument('--n_epochs', type=int, default=600, help="epochs to train")
 parser.add_argument('--log_interval', type=int, default=20, help="epochs to train")
 parser.add_argument('--workers', type=int, default=10, help='number of data loading workers')
@@ -46,7 +47,7 @@ parser.add_argument('--refine_model', type=str, default='pose_refine_model_69_0.
 opt = parser.parse_args()
 
 
-def get_intrinsic_matrix(frame):
+def get_intrinsic_matrix(frame, img_w=640, img_h=480):
     intrinsics = frame.profile.as_video_stream_profile().intrinsics
     out = o3d.camera.PinholeCameraIntrinsic(img_w, img_h, intrinsics.fx,
                                             intrinsics.fy, intrinsics.ppx,
@@ -165,8 +166,6 @@ def generate_colors(n):
 
 def main():
     visualize_with_o3d = False
-    r_min, r_max = 0, img_h
-    c_min, c_max = 0, img_w
     num_points = 500
 
     # ycb_dataset = PoseDataset_ycb('test', num_points, False, opt.dataset_root, 0.0, True)
@@ -208,8 +207,8 @@ def main():
 
     # Create a config and configure the pipeline to stream different resolutions of color and depth streams
     config = rs.config()
-    config.enable_stream(rs.stream.depth, img_w, img_h, rs.format.z16, 30)
-    config.enable_stream(rs.stream.color, img_w, img_h, rs.format.bgr8, 30)     # color image streamed in bgr format
+    config.enable_stream(rs.stream.depth, opt.img_w, opt.img_h, rs.format.z16, 30)
+    config.enable_stream(rs.stream.color, opt.img_w, opt.img_h, rs.format.bgr8, 30)     # color image streamed in bgr format
 
     # Start streaming
     profile = pipeline.start(config)
