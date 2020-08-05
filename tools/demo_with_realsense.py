@@ -23,6 +23,7 @@ from lib.utils import cloud_to_dims, iterative_points_refine
 from visualize_bbox import PoseYCBDataset_visualize
 import argparse
 import collections
+import time
 
 cropped_w, cropped_h = 160, 160
 xmap = np.array([[j for i in range(640)] for j in range(480)])
@@ -197,10 +198,17 @@ class ObjectPoseEstimate(object):
             self.segmenter.load_state_dict(checkpoint)
         self.segmenter.eval()
 
-        obj_name = 'mug'
-        self.obj_idx = find_idx_with_name(self.list_obj, obj_name)
+        obj_name = ['tomato']
+        # self.obj_idx = find_idx_with_name(self.list_obj, obj_name)
+        # self.model_points = self.ycb_dataset.cld[self.obj_idx]
+        self.obj_idx = []
+        self.model_points = []
+        for name in obj_name:
+            idx = find_idx_with_name(self.list_obj, name)
+            self.obj_idx.append(idx)
+            self.model_points.append(self.ycb_dataset.cld[idx])
         print('object idx {}'.format(self.obj_idx))
-        self.model_points = self.ycb_dataset.cld[self.obj_idx]
+
 
         # Create a pipeline
         self.pipeline = rs.pipeline()
@@ -328,7 +336,7 @@ class ObjectPoseEstimate(object):
 
         return obj_masks, segmented_bboxes, obj_masks_all
 
-    def object_pose_estimate(self, rgb, depth_image, obj_idx, obj_masks, segmented_bboxes, color_image=None):
+    def object_pose_estimate(self, obj_idx, obj_points, rgb, depth_image, obj_masks, segmented_bboxes, color_image = None):
         r_min, r_max, c_min, c_max = segmented_bboxes[obj_idx]
         obj_mask = obj_masks[obj_idx]
         # choose = obj_mask[r_min:r_max, c_min:c_max].flatten().nonzero()[0]
@@ -386,9 +394,9 @@ class ObjectPoseEstimate(object):
             self.ycb_dataset.update_transformation(my_r, my_t)
 
             # randomly sample points from object mesh and transform it with my_r, my_t
-            list_points = [i for i in range(0, len(self.model_points))]
+            list_points = [i for i in range(0, len(obj_points))]
             list_points = random.sample(list_points, self.num_points)
-            transformed_model_points = self.ycb_dataset.transform_points(self.model_points[list_points])
+            transformed_model_points = self.ycb_dataset.transform_points(obj_points[list_points])
             target_pxl = self.ycb_dataset.project_point_pxl(transformed_model_points)
             # ycb_dataset.visualize_item(index, target_pxl)
             self.ycb_dataset.visualize_img(color_image, obj_idx, target_pxl, cv_show = False)
@@ -415,12 +423,16 @@ class ObjectPoseEstimate(object):
 
             rgb = np.transpose(color_image[:, :, ::-1], (2, 0, 1))    # convert to rgb and channel first
             obj_masks, segmented_bboxes, obj_masks_all = self.segment_objects(rgb, color_image, self.obj_idx)
-            try:
-                pred_r, pred_t = self.object_pose_estimate(rgb, depth_image, self.obj_idx, obj_masks, segmented_bboxes,
-                                                           color_image)
-            except Exception as e:
-                print(e)
-                pass
+            # start = time.time()
+            for idx, obj_points in zip(self.obj_idx, self.model_points):
+                try:
+                    pred_r, pred_t = self.object_pose_estimate(idx, obj_points, rgb, depth_image, obj_masks, segmented_bboxes,
+                                                               color_image)
+                except Exception as e:
+                    print(e)
+                    pass
+            # end = time.time()
+            # print('computation time {}s'.format(end - start))
             self.render(depth_image, color_image, obj_masks_all)
             key = cv2.waitKey(1)
             # Press esc or 'q' to close the image window
