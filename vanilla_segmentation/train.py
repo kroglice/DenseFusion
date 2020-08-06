@@ -28,6 +28,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--dataset_root', default='/home/data1/jeremy/YCB_Video_Dataset', help="dataset root dir (''YCB_Video Dataset'')")
 parser.add_argument('--batch_size', type=int, default=3, help="batch size")
 parser.add_argument('--n_epochs', type=int, default=600, help="epochs to train")
+parser.add_argument('--n_samples_train', type=int, default=10000, help="numbers of training samples")
+parser.add_argument('--n_samples_test', type=int, default=2500, help="numbers of testing samples")
 parser.add_argument('--log_interval', type=int, default=20, help="epochs to train")
 parser.add_argument('--workers', type=int, default=10, help='number of data loading workers')
 parser.add_argument('--lr', type=float, default=0.0001, help="learning rate")
@@ -42,9 +44,9 @@ if __name__ == '__main__':
     random.seed(opt.manualSeed)
     torch.manual_seed(opt.manualSeed)
 
-    dataset = SegDataset(opt.dataset_root, '../datasets/ycb/dataset_config/train_data_list.txt', True, 5000)
+    dataset = SegDataset(opt.dataset_root, '../datasets/ycb/dataset_config/train_data_list.txt', True, opt.n_samples_train)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=opt.batch_size, shuffle=True, num_workers=int(opt.workers))
-    test_dataset = SegDataset(opt.dataset_root, '../datasets/ycb/dataset_config/test_data_list.txt', False, 1000)
+    test_dataset = SegDataset(opt.dataset_root, '../datasets/ycb/dataset_config/test_data_list.txt', False, opt.n_samples_train)
     test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=True, num_workers=int(opt.workers))
 
     print(len(dataset), len(test_dataset))
@@ -64,7 +66,7 @@ if __name__ == '__main__':
     st_time = time.time()
 
     writer = SummaryWriter()
-    launchTensorBoard('runs')
+    # launchTensorBoard('runs')
 
     for epoch in tqdm(range(1, opt.n_epochs)):
         model.train()
@@ -73,7 +75,7 @@ if __name__ == '__main__':
         logger = setup_logger('epoch%d' % epoch, os.path.join(opt.log_dir, 'epoch_%d_log.txt' % epoch))
         logger.info('Train time {0}'.format(time.strftime("%Hh %Mm %Ss", time.gmtime(time.time() - st_time)) + ', ' + 'Training started'))
 
-        for i, data in enumerate(dataloader, 0):
+        for data in tqdm(dataloader, miniters = opt.log_interval):
             rgb, target = data
             rgb, target = Variable(rgb).cuda(), Variable(target).cuda()
             semantic = model(rgb)
@@ -84,9 +86,9 @@ if __name__ == '__main__':
             optimizer.step()
 
             if train_time != 0 and train_time % opt.log_interval == 0:
-                logger.info('Train time {0} Batch {1} CEloss {2}'.format(
-                    time.strftime("%Hh %Mm %Ss", time.gmtime(time.time() - st_time)), train_time,
-                    semantic_loss.item()))
+                # logger.info('Train time {0} Batch {1} CEloss {2}'.format(
+                #     time.strftime("%Hh %Mm %Ss", time.gmtime(time.time() - st_time)), train_time,
+                #     semantic_loss.item()))
                 torch.save(model.state_dict(), os.path.join(opt.model_save_path, 'model_current.pth'))
             train_time += 1
 
@@ -98,15 +100,15 @@ if __name__ == '__main__':
         test_time = 0
         logger = setup_logger('epoch%d_test' % epoch, os.path.join(opt.log_dir, 'epoch_%d_test_log.txt' % epoch))
         logger.info('Test time {0}'.format(time.strftime("%Hh %Mm %Ss", time.gmtime(time.time() - st_time)) + ', ' + 'Testing started'))
-        for j, data in enumerate(test_dataloader, 0):
+        for data in tqdm(test_dataloader, miniters = opt.log_interval):
             rgb, target = data
             rgb, target = Variable(rgb).cuda(), Variable(target).cuda()
             semantic = model(rgb)
             semantic_loss = criterion(semantic, target)
             test_all_cost += semantic_loss.item()
 
-            if test_time != 0 and test_time % opt.log_interval == 0:
-                logger.info('Test time {0} Batch {1} CEloss {2}'.format(time.strftime("%Hh %Mm %Ss", time.gmtime(time.time() - st_time)), test_time, semantic_loss.item()))
+            # if test_time != 0 and test_time % opt.log_interval == 0:
+            #     logger.info('Test time {0} Batch {1} CEloss {2}'.format(time.strftime("%Hh %Mm %Ss", time.gmtime(time.time() - st_time)), test_time, semantic_loss.item()))
             test_time += 1
 
         test_all_cost = test_all_cost / test_time
