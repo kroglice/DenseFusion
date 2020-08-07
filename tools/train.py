@@ -22,7 +22,7 @@ import torchvision.utils as vutils
 from torch.autograd import Variable
 from datasets.ycb.dataset import PoseDataset as PoseDataset_ycb
 from datasets.linemod.dataset import PoseDataset as PoseDataset_linemod
-from lib.network import PoseNet, PoseRefineNet
+from lib.network import PoseNet, PoseNetRNN, PoseRefineNet
 from lib.loss import Loss
 from lib.loss_refiner import Loss_refine
 from lib.utils import setup_logger
