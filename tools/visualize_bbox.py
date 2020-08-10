@@ -85,9 +85,10 @@ class Visualizer(object):
             cv2.waitKey(0)
             cv2.destroyAllWindows()
 
-    def project_point_pxl(self, points):
+    def project_point_pxl(self, points, distCoeffs=None):
         """
         Convert 3D point into image pixel given camera intrinsic information
+        :param distCoeffs:
         :param points:
         :return:
         """
@@ -103,7 +104,7 @@ class Visualizer(object):
         # u = self.cam_fx * points[:, 0] / points[:, 2] + self.cam_cx
         # v = self.cam_fy * points[:, 1] / points[:, 2] + self.cam_cy
         pixel_points, _ = cv2.projectPoints(points.reshape(1, -1, 3), np.zeros((3, 1)), np.zeros((3, 1)),
-                                            cam_matrix, None)
+                                            cam_matrix, distCoeffs)
         return np.floor(pixel_points.reshape((-1, 2))).astype(int)
 
     def swap_pxls(self, pxls):

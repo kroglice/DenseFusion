@@ -60,7 +60,7 @@ def get_intrinsic_matrix(frame, img_w=640, img_h=480):
 
 def get_intrinsic_info(frame):
     intrinsics = frame.profile.as_video_stream_profile().intrinsics
-    return intrinsics.ppx, intrinsics.ppy, intrinsics.fx, intrinsics.fy
+    return intrinsics.ppx, intrinsics.ppy, intrinsics.fx, intrinsics.fy, intrinsics.coeffs
 
 
 def pc_with_o3d(color_frame, depth_image, clipping_distance_in_meters, depth_scale):
@@ -199,7 +199,7 @@ class ObjectPoseEstimate(object):
             self.segmenter.load_state_dict(checkpoint)
         self.segmenter.eval()
 
-        obj_name = ['tomato', 'cracker']
+        obj_name = ['tomato', 'mustard', 'sugar']
         # self.obj_idx = find_idx_with_name(self.list_obj, obj_name)
         # self.model_points = self.ycb_dataset.cld[self.obj_idx]
         self.obj_idx = []
@@ -227,7 +227,7 @@ class ObjectPoseEstimate(object):
         depth_sensor = profile.get_device().first_depth_sensor()
         self.depth_scale = depth_sensor.get_depth_scale()
         print("Depth Scale is: ", self.depth_scale)
-        self.cam_cx, self.cam_cy, self.cam_fx, self.cam_fy = None, None, None, None
+        self.cam_cx, self.cam_cy, self.cam_fx, self.cam_fy, self.coeffs = None, None, None, None, None
 
         # We will be removing the background of objects more than
         #  clipping_distance_in_meters meters away
@@ -267,7 +267,7 @@ class ObjectPoseEstimate(object):
             # Get aligned frames
             aligned_depth_frame = aligned_frames.get_depth_frame()  # aligned_depth_frame is a 640x480 depth image
             color_frame = aligned_frames.get_color_frame()
-            self.cam_cx, self.cam_cy, self.cam_fx, self.cam_fy = get_intrinsic_info(color_frame)
+            self.cam_cx, self.cam_cy, self.cam_fx, self.cam_fy, self.coeffs = get_intrinsic_info(color_frame)
             self.ycb_dataset.update_cam_info([self.cam_cx, self.cam_cy, self.cam_fx, self.cam_fy])
 
             # Validate that both frames are valid
@@ -290,7 +290,7 @@ class ObjectPoseEstimate(object):
         # Get aligned frames
         aligned_depth_frame = aligned_frames.get_depth_frame()  # aligned_depth_frame is a 640x480 depth image
         color_frame = aligned_frames.get_color_frame()
-        self.cam_cx, self.cam_cy, self.cam_fx, self.cam_fy = get_intrinsic_info(color_frame)
+        self.cam_cx, self.cam_cy, self.cam_fx, self.cam_fy, self.coeffs = get_intrinsic_info(color_frame)
         self.ycb_dataset.update_cam_info([self.cam_cx, self.cam_cy, self.cam_fx, self.cam_fy])
 
         # Validate that both frames are valid
@@ -398,7 +398,7 @@ class ObjectPoseEstimate(object):
             list_points = [i for i in range(0, len(obj_points))]
             list_points = random.sample(list_points, self.num_points)
             transformed_model_points = self.ycb_dataset.transform_points(obj_points[list_points])
-            target_pxl = self.ycb_dataset.project_point_pxl(transformed_model_points)
+            target_pxl = self.ycb_dataset.project_point_pxl(transformed_model_points, np.float32(self.coeffs))
             # ycb_dataset.visualize_item(index, target_pxl)
             self.ycb_dataset.visualize_img(color_image, obj_idx, target_pxl, cv_show = False)
             return my_r, my_t
@@ -534,7 +534,7 @@ def main():
             # Get aligned frames
             aligned_depth_frame = aligned_frames.get_depth_frame() # aligned_depth_frame is a 640x480 depth image
             color_frame = aligned_frames.get_color_frame()
-            cam_cx, cam_cy, cam_fx, cam_fy = get_intrinsic_info(color_frame)
+            cam_cx, cam_cy, cam_fx, cam_fy, dist_coeffs = get_intrinsic_info(color_frame)
             ycb_dataset.update_cam_info([cam_cx, cam_cy, cam_fx, cam_fy])
 
             # Validate that both frames are valid
