@@ -93,6 +93,15 @@ class PoseNet(nn.Module):
         self.num_obj = num_obj
 
     def forward(self, img, x, choose, obj):
+        """
+
+        :param img: rgb image
+        :param x: sampled point cloud with choose parameter.
+        Point cloud is computed from depth wrt camera intrinsic parameters
+        :param choose: chosen pixels from the mask of object. This will decide how image and depth channel aligned
+        :param obj: index of object
+        :return:
+        """
         out_img = self.cnn(img)
         
         bs, di, _, _ = out_img.size()

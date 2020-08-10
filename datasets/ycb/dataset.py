@@ -99,11 +99,8 @@ class PoseDataset(data.Dataset):
         print(len(self.list))
 
     def __getitem__(self, index):
-        img = Image.open('{0}/{1}-color.png'.format(self.root, self.list[index]))
-        depth = np.array(Image.open('{0}/{1}-depth.png'.format(self.root, self.list[index])))
-        label = np.array(Image.open('{0}/{1}-label.png'.format(self.root, self.list[index])))
-        meta = scio.loadmat('{0}/{1}-meta.mat'.format(self.root, self.list[index]))
-
+        file_prefix = self.list[index]
+        # print(self.list[index], np.array(img).shape, depth.shape, label.shape)
         if self.list[index][:8] != 'data_syn' and int(self.list[index][5:9]) >= 60:
             cam_cx = self.cam_cx_2
             cam_cy = self.cam_cy_2
@@ -114,6 +111,11 @@ class PoseDataset(data.Dataset):
             cam_cy = self.cam_cy_1
             cam_fx = self.cam_fx_1
             cam_fy = self.cam_fy_1
+
+        img = Image.open('{0}/{1}-color.png'.format(self.root, file_prefix))
+        depth = np.array(Image.open('{0}/{1}-depth.png'.format(self.root, file_prefix)))
+        label = np.array(Image.open('{0}/{1}-label.png'.format(self.root, file_prefix)))
+        meta = scio.loadmat('{0}/{1}-meta.mat'.format(self.root, file_prefix))
 
         mask_back = ma.getmaskarray(ma.masked_equal(label, 0))
 
@@ -154,7 +156,7 @@ class PoseDataset(data.Dataset):
             img = self.trancolor(img)
 
         rmin, rmax, cmin, cmax = get_bbox(mask_label)
-        img = np.transpose(np.array(img)[:, :, :3], (2, 0, 1))[:, rmin:rmax, cmin:cmax]
+        img = np.transpose(np.array(img)[:, :, :3], (2, 0, 1))[:, rmin:rmax, cmin:cmax] # image is cropped here
 
         if self.list[index][:8] == 'data_syn':
             seed = random.choice(self.real)
@@ -228,7 +230,7 @@ class PoseDataset(data.Dataset):
         # for it in target:
         #    fw.write('{0} {1} {2}\n'.format(it[0], it[1], it[2]))
         # fw.close()
-        
+
         return torch.from_numpy(cloud.astype(np.float32)), \
                torch.LongTensor(choose.astype(np.int32)), \
                self.norm(torch.from_numpy(img_masked.astype(np.float32))), \
