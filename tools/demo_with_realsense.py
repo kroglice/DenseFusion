@@ -23,6 +23,7 @@ from lib.utils import cloud_to_dims, iterative_points_refine
 from visualize_bbox import PoseYCBDataset_visualize
 import argparse
 import collections
+import traceback
 import time
 
 cropped_w, cropped_h = 160, 160
@@ -198,7 +199,7 @@ class ObjectPoseEstimate(object):
             self.segmenter.load_state_dict(checkpoint)
         self.segmenter.eval()
 
-        obj_name = ['tomato']
+        obj_name = ['tomato', 'cracker']
         # self.obj_idx = find_idx_with_name(self.list_obj, obj_name)
         # self.model_points = self.ycb_dataset.cld[self.obj_idx]
         self.obj_idx = []
@@ -429,6 +430,7 @@ class ObjectPoseEstimate(object):
                     pred_r, pred_t = self.object_pose_estimate(idx, obj_points, rgb, depth_image, obj_masks, segmented_bboxes,
                                                                color_image)
                 except Exception as e:
+                    tb = traceback.format_exc()
                     print(e)
                     pass
             # end = time.time()
