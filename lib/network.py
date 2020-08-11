@@ -112,28 +112,30 @@ class PoseNet(nn.Module):
         #
         # x = x.transpose(2, 1).contiguous()
         # ap_x = self.feat(x, emb)
-        #
-        # rx = F.relu(self.conv1_r(ap_x))
-        # tx = F.relu(self.conv1_t(ap_x))
-        # cx = F.relu(self.conv1_c(ap_x))
-        #
-        # rx = F.relu(self.conv2_r(rx))
-        # tx = F.relu(self.conv2_t(tx))
-        # cx = F.relu(self.conv2_c(cx))
-        #
-        # rx = F.relu(self.conv3_r(rx))
-        # tx = F.relu(self.conv3_t(tx))
-        # cx = F.relu(self.conv3_c(cx))
 
-        # rx = self.conv4_r(rx).view(bs, self.num_obj, 4, self.num_points)
-        # tx = self.conv4_t(tx).view(bs, self.num_obj, 3, self.num_points)
-        # cx = torch.sigmoid(self.conv4_c(cx)).view(bs, self.num_obj, 1, self.num_points)
+        x, emb, bs = self.backbone(img, x, choose)
+        ap_x = self.feat(x, emb)
+        rx = F.relu(self.conv1_r(ap_x))
+        tx = F.relu(self.conv1_t(ap_x))
+        cx = F.relu(self.conv1_c(ap_x))
 
-        rx, tx, cx, bs, emb = self.backbone(img, x, choose)
+        rx = F.relu(self.conv2_r(rx))
+        tx = F.relu(self.conv2_t(tx))
+        cx = F.relu(self.conv2_c(cx))
 
-        rx = rx.view(bs, self.num_obj, 4, self.num_points)
-        tx = tx.view(bs, self.num_obj, 3, self.num_points)
-        cx = torch.sigmoid(cx).view(bs, self.num_obj, 1, self.num_points)
+        rx = F.relu(self.conv3_r(rx))
+        tx = F.relu(self.conv3_t(tx))
+        cx = F.relu(self.conv3_c(cx))
+
+        rx = self.conv4_r(rx).view(bs, self.num_obj, 4, self.num_points)
+        tx = self.conv4_t(tx).view(bs, self.num_obj, 3, self.num_points)
+        cx = torch.sigmoid(self.conv4_c(cx)).view(bs, self.num_obj, 1, self.num_points)
+
+        # rx, tx, cx, bs, emb = self.backbone(img, x, choose)
+        #
+        # rx = rx.view(bs, self.num_obj, 4, self.num_points)
+        # tx = tx.view(bs, self.num_obj, 3, self.num_points)
+        # cx = torch.sigmoid(cx).view(bs, self.num_obj, 1, self.num_points)
 
         b = 0
         out_rx = torch.index_select(rx[b], 0, obj[b])
@@ -147,6 +149,11 @@ class PoseNet(nn.Module):
         return out_rx, out_tx, out_cx, emb.detach()
 
     def backbone(self, img, x, choose):
+        if len(list(img.shape)) == 5:
+            batch_size, timesteps, C, H, W = img.size()
+            img = img.view(batch_size * timesteps, C, H, W)
+            x = x.view(batch_size * timesteps, -1, 3)
+            choose = choose.view(batch_size * timesteps, 1, -1)
         out_img = self.cnn(img)
 
         bs, di, _, _ = out_img.size()
@@ -156,8 +163,60 @@ class PoseNet(nn.Module):
         emb = torch.gather(emb, 2, choose).contiguous()
 
         x = x.transpose(2, 1).contiguous()
-        ap_x = self.feat(x, emb)
+        # ap_x = self.feat(x, emb)
 
+        # rx = F.relu(self.conv1_r(ap_x))
+        # tx = F.relu(self.conv1_t(ap_x))
+        # cx = F.relu(self.conv1_c(ap_x))
+        #
+        # rx = F.relu(self.conv2_r(rx))
+        # tx = F.relu(self.conv2_t(tx))
+        # cx = F.relu(self.conv2_c(cx))
+        #
+        # rx = F.relu(self.conv3_r(rx))
+        # tx = F.relu(self.conv3_t(tx))
+        # cx = F.relu(self.conv3_c(cx))
+        #
+        # rx = self.conv4_r(rx)
+        # tx = self.conv4_t(tx)
+        # cx = self.conv4_c(cx)
+        # return rx, tx, cx, bs, emb
+        return x, emb, bs
+ 
+
+class PoseNetRNN(PoseNet):
+    def __init__(self, num_points, num_obj, timesteps=2):
+        super().__init__(num_points, num_obj)
+        # self.rnn_r = torch.nn.LSTM(num_obj*4*num_points, num_points, 1, batch_first=True)
+        # self.rnn_t = torch.nn.LSTM(num_obj*3*num_points, num_points, 1, batch_first=True)
+        # self.rnn_c = torch.nn.LSTM(num_obj*1*num_points, num_points, 1, batch_first=True)
+        self.rnn_x = torch.nn.LSTM(300, 300, 1, batch_first=True)
+        self.rnn_emb = torch.nn.LSTM(3200, 3200, 1, batch_first = True)
+        self.timesteps = timesteps
+
+    def forward(self, img, x, choose, obj):
+        # rx, tx, cx, bs, emb = self.backbone(img, x, choose)
+        x, emb, bs = self.backbone(img, x, choose)
+
+        # bs = bs//self.timesteps
+        # x = x.view(bs, self.timesteps, -1)
+        # emb = emb.view(bs, self.timesteps, -1)
+        # x, _ = self.rnn_x(x)
+        # emb, _ = self.rnn_emb(emb)
+        # x = x.view(bs, -1, self.num_points)
+
+        # rx = rx.view(bs, self.timesteps, -1)
+        # tx = tx.view(bs, self.timesteps, -1)
+        # cx = cx.view(bs, self.timesteps, -1)
+        # rx, _ = self.rnn_r(rx)
+        # tx, _ = self.rnn_t(tx)
+        # cx, _ = self.rnn_c(cx)
+
+        # rx = rx.view(bs, self.num_obj, 4, self.num_points)
+        # tx = tx.view(bs, self.num_obj, 3, self.num_points)
+        # cx = torch.sigmoid(cx).view(bs, self.num_obj, 1, self.num_points)
+
+        ap_x = self.feat(x, emb)
         rx = F.relu(self.conv1_r(ap_x))
         tx = F.relu(self.conv1_t(ap_x))
         cx = F.relu(self.conv1_c(ap_x))
@@ -170,34 +229,9 @@ class PoseNet(nn.Module):
         tx = F.relu(self.conv3_t(tx))
         cx = F.relu(self.conv3_c(cx))
 
-        rx = self.conv4_r(rx)
-        tx = self.conv4_t(tx)
-        cx = self.conv4_c(cx)
-        return rx, tx, cx, bs, emb
- 
-
-class PoseNetRNN(PoseNet):
-    def __init__(self, num_points, num_obj, timesteps=4):
-        super().__init__(num_points, num_obj)
-        self.rnn_r = torch.nn.LSTM(num_obj*4, 10, 1, batch_first=True)
-        self.rnn_t = torch.nn.LSTM(num_obj*3, 10, 1, batch_first=True)
-        self.rnn_c = torch.nn.LSTM(num_obj*1, 10, 1, batch_first=True)
-        self.timesteps = timesteps
-
-    def forward(self, img, x, choose, obj):
-        rx, tx, cx, bs, emb = self.backbone(img, x, choose)
-
-        bs = bs//self.timesteps
-
-        rx = rx.view(bs, self.timesteps, -1)
-        tx = tx.view(bs, self.timesteps, -1)
-        rx = self.rnn_r(rx)
-        tx = self.rnn_t(tx)
-        cx = self.rnn_c(cx)
-
-        rx = rx.view(bs, self.num_obj, 4, self.num_points)
-        tx = tx.view(bs, self.num_obj, 3, self.num_points)
-        cx = torch.sigmoid(cx).view(bs, self.num_obj, 1, self.num_points)
+        rx = self.conv4_r(rx).view(bs, self.num_obj, 4, self.num_points)
+        tx = self.conv4_t(tx).view(bs, self.num_obj, 3, self.num_points)
+        cx = torch.sigmoid(self.conv4_c(cx)).view(bs, self.num_obj, 1, self.num_points)
 
         b = 0
         out_rx = torch.index_select(rx[b], 0, obj[b])

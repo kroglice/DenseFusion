@@ -95,7 +95,7 @@ class PoseDataset(data.Dataset):
         self.num_pt_mesh_large = 2600
         self.refine = refine
         self.front_num = 2
-        self.timesteps = 4
+        self.timesteps = 2
 
         print(len(self.list))
 
@@ -246,24 +246,39 @@ class PoseDataset(data.Dataset):
             # fw.close()
             clouds.append(cloud.astype(np.float32))
             chooses.append(choose.astype(np.int32))
-            imgs_masked.append(img_masked.astype(np.float32))
+            imgs_masked.append(self.norm(torch.from_numpy(img_masked.astype(np.float32))).numpy())
             targets.append(target.astype(np.float32))
             models_points.append(model_points.astype(np.float32))
             idxes.append(int(obj[idx])-1)
 
-        clouds = np.array(clouds).reshape([1, self.timesteps, *(cloud.shape)])
-        chooses = np.array(chooses).reshape([1, self.timesteps, *(choose.shape)])
-        imgs_masked = np.array(imgs_masked).reshape([1, self.timesteps, *(img_masked.shape)])
-        targets = np.array(targets).reshape([1, self.timesteps, *(target.shape)])
-        models_points = np.array(models_points).reshape([1, self.timesteps, *(model_points.shape)])
-        idxes = np.array(idxes).reshape([1, self.timesteps, -1])
+        # return torch.from_numpy(cloud.astype(np.float32)), \
+        #        torch.LongTensor(choose.astype(np.int32)), \
+        #        self.norm(torch.from_numpy(img_masked.astype(np.float32))), \
+        #        torch.from_numpy(target.astype(np.float32)), \
+        #        torch.from_numpy(model_points.astype(np.float32)), \
+        #        torch.LongTensor([int(obj[idx]) - 1])
 
-        return torch.from_numpy(cloud.astype(np.float32)), \
-               torch.LongTensor(choose.astype(np.int32)), \
-               self.norm(torch.from_numpy(img_masked.astype(np.float32))), \
-               torch.from_numpy(target.astype(np.float32)), \
-               torch.from_numpy(model_points.astype(np.float32)), \
-               torch.LongTensor([int(obj[idx]) - 1])
+        a = [img.shape for img in imgs_masked]
+        checked = checkEqual(imgs_masked)
+        print(a, checked)
+        if checked:
+            clouds = np.array(clouds).reshape([self.timesteps, *(cloud.shape)])
+            chooses = np.array(chooses).reshape([self.timesteps, *(choose.shape)])
+            imgs_masked = np.array(imgs_masked).reshape([self.timesteps, *(img_masked.shape)])
+            targets = np.array(targets).reshape([self.timesteps, *(target.shape)])
+            models_points = np.array(models_points).reshape([self.timesteps, *(model_points.shape)])
+            idxes = np.array(idxes).reshape([self.timesteps, -1])
+
+            return torch.from_numpy(clouds), \
+                   torch.LongTensor(chooses), \
+                   torch.from_numpy(imgs_masked), \
+                   torch.from_numpy(targets[-1]), \
+                   torch.from_numpy(model_points.astype(np.float32)), \
+                   torch.LongTensor(idxes[0])
+            # model_point should be the same for all
+            # idx should be the same for all element
+        else:
+            self.__getitem__(index+1)
 
     def __len__(self):
         return self.length
@@ -281,6 +296,14 @@ class PoseDataset(data.Dataset):
 border_list = [-1, 40, 80, 120, 160, 200, 240, 280, 320, 360, 400, 440, 480, 520, 560, 600, 640, 680]
 img_width = 480
 img_length = 640
+
+def checkEqual(iterator):
+    iterator = iter(iterator)
+    try:
+        first = next(iterator)
+    except StopIteration:
+        return True
+    return all(first.shape == rest.shape for rest in iterator)
 
 def get_bbox(label):
     rows = np.any(label, axis=1)
